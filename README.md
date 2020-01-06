@@ -59,7 +59,7 @@ const pool = new PuppeteerPool({
 });
 ```
 
-### Aquire page
+### Acquire page
 
 ```typescript
 const page = await pool.acquire();
