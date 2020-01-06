@@ -1,4 +1,4 @@
-# puppeteer-pool
+# @eu-ge-ne/puppeteer-pool
 
 ## About
 
