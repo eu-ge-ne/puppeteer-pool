@@ -34,7 +34,7 @@
         "typescript": "3.7.4"
     },
     "dependencies": {
-        "@eu-ge-ne/lock-async": "1.0.3",
+        "@eu-ge-ne/lock-async": "1.0.4",
         "generic-pool": "^3.7.1",
         "puppeteer-core": "^2.0.0"
     }
