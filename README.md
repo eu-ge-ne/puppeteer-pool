@@ -1,16 +1,19 @@
-# @eu-ge-ne/puppeteer-pool
-
-## About
+@eu-ge-ne/puppeteer-pool
+========================
 
 Page pooling for Puppeteer. Written in TypeScript. Each page is opened in new browser instance.
 
-## Install
+###### [Install](#Install) | [Example](#Example) | [Api](#Api) | [License](#License)
+
+Install
+-------
 
 ```bash
 $ npm install @eu-ge-ne/puppeteer-pool
 ```
 
-## Example
+Example
+-------
 
 ```typescript
 import { PuppeteerPool } from "@eu-ge-ne/puppeteer-pool";
@@ -41,12 +44,13 @@ try {
     // ...
 } finally {
     if (page) {
-        await page.destroy(page);
+        await pool.destroy(page);
     }
 }
 ```
 
-## API
+API
+---
 
 ### Create instance
 
@@ -85,6 +89,7 @@ Returns array of browser descriptors:
  - `active: number` - number of active pages (browser instance will be
     destroyed when `counter === concurrency` and `active === 0`)
 
-## License
+License
+-------
 
 [MIT](LICENSE)
