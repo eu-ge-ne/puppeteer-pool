@@ -4,7 +4,7 @@ import { LockAsync } from "@eu-ge-ne/lock-async";
 
 export type Options = {
     launch?: () => Promise<Browser>;
-    launchOptions: LaunchOptions;
+    launchOptions?: LaunchOptions;
     concurrency: number;
 };
 
