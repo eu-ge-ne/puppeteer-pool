@@ -3,7 +3,7 @@
 
 Page pooling for Puppeteer. Written in TypeScript. Each page is opened in new browser instance.
 
-###### [Install](#Install) | [Example](#Example) | [Api](#Api) | [License](#License)
+[Example](#Example) | [Api](#Api) | [License](#License)
 
 Install
 -------
@@ -60,6 +60,28 @@ import { PuppeteerPool } from "@eu-ge-ne/puppeteer-pool";
 const pool = new PuppeteerPool({
     launchOptions: { }, // Puppeteer's LaunchOptions
     concurrency: 1, // Pool's concurrency
+});
+```
+
+Alternatively, provide `launch` option with function returning `Promise<Browser>`:
+
+```typescript
+import { PuppeteerPool, launch } from "@eu-ge-ne/puppeteer-pool";
+
+const pool = new PuppeteerPool({
+    launch: () => launch({
+        ignoreHTTPSErrors: true,
+        timeout: 60000,
+        headless: true,
+        args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-features=site-per-process",
+            "--disable-extensions",
+        ],
+    }),
+    concurrency: 1,
 });
 ```
 
