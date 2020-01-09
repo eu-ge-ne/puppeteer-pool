@@ -3,6 +3,7 @@ import { Pool, createPool } from "generic-pool";
 import { LockAsync } from "@eu-ge-ne/lock-async";
 
 export type Options = {
+    launch?: () => Promise<Browser>;
     launchOptions: LaunchOptions;
     concurrency: number;
 };
@@ -62,7 +63,9 @@ export class PuppeteerPool {
             let item = this.items.find(x => x.counter < this.options.concurrency);
 
             if (!item) {
-                const browser = await launch(this.options.launchOptions);
+                const browser = this.options.launch
+                    ? await this.options.launch()
+                    : await launch(this.options.launchOptions);
                 item = { created: Date.now(), browser, counter: 0, active: 0 };
                 this.items.push(item);
             }
