@@ -3,7 +3,9 @@
 
 Page pooling for Puppeteer. Written in TypeScript. Each page is opened in new browser instance.
 
-[Example](#Example) | [Api](#Api) | [License](#License)
+###### [Install](#Install) | [Example](#Example) | [Api](#Api) | [License](#License)
+
+![](https://github.com/eu-ge-ne/puppeteer-pool/workflows/Tests/badge.svg)
 
 Install
 -------
