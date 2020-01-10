@@ -27,7 +27,7 @@ type Item = {
 };
 
 export class PuppeteerPool {
-    private readonly lock = new LockAsync();
+    private readonly lock = new LockAsync(10_000);
 
     private items: Item[] = [];
     private nextItemId = 1;
@@ -39,6 +39,7 @@ export class PuppeteerPool {
     }
 
     public async stop() {
+        debug("stop: stopping");
         return await this.lock.run(async () => {
             for (const item of this.items) {
                 for (const page of item.pages) {
@@ -47,17 +48,8 @@ export class PuppeteerPool {
                 await item.browser.close();
             }
             this.items = [];
+            debug("stop: stopped");
         });
-
-        debug("stop: stopping");
-        let itemIndex = this.items.length;
-        while (itemIndex--) {
-            let pageIndex = this.items[itemIndex].pages.length;
-            while (pageIndex--) {
-                await this.destroy(this.items[itemIndex].pages[pageIndex]);
-            }
-        }
-        debug("stop: stopped");
     }
 
     public status(): Status {
