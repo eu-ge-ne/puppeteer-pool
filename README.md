@@ -55,15 +55,18 @@ API
 ### Create instance
 
 ```typescript
-import { PuppeteerPool } from "@eu-ge-ne/puppeteer-pool";
+import { PuppeteerPool, LaunchOptions } from "@eu-ge-ne/puppeteer-pool";
 
-const pool = new PuppeteerPool({
-    launchOptions: { }, // Puppeteer's LaunchOptions
-    concurrency: 1, // Pool's concurrency
-});
+// LaunchOptions for puppeteer
+const launchOptions: LaunchOptions = {};
+
+// Concurrency of the pool
+const concurrency = 2;
+
+const pool = new PuppeteerPool({ launchOptions, concurrency });
 ```
 
-Alternatively, provide `launch` option with function returning `Promise<Browser>`:
+Or, provide `launch` option with function returning `Promise<Browser>`:
 
 ```typescript
 import { PuppeteerPool, launch } from "@eu-ge-ne/puppeteer-pool";
@@ -105,11 +108,9 @@ const [{ lifetime, counter, active }, ...rest] = pool.status();
 
 Returns array of browser descriptors:
 
- - `lifetime: number` - browser instance lifetime in ms
- - `counter: number` - number of pages, opened by this browser instance
-    (max value is equal to `concurrency` parameter)
- - `active: number` - number of active pages (browser instance will be
-    destroyed when `counter === concurrency` and `active === 0`)
+- `lifetime: number` - browser instance lifetime in ms
+- `counter: number` - number of pages, opened by this browser instance (max value is equal to `concurrency` parameter)
+- `active: number` - number of active pages (browser instance will be destroyed when `counter === concurrency` and `active === 0`)
 
 License
 -------
