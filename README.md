@@ -94,7 +94,7 @@ const page = await pool.acquire();
 ### Destroy page
 
 ```typescript
-await page.destroy(page);
+await pool.destroy(page);
 ```
 
 ### Get status
