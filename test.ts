@@ -61,7 +61,20 @@ test("status() returns status object", async t => {
     t.assert(status[0].active === 1);
 });
 
-test("stop()", async t=> {
+test("stop()", async t => {
     const pool = t.context.pool;
     await t.notThrowsAsync(() => pool.stop());
+});
+
+test("After stop() all browsers and pages are closed", async t => {
+    const pool = t.context.pool;
+    const page1 = await pool.acquire();
+    const page2 = await pool.acquire();
+    await pool.destroy(page1);
+    const page3 = await pool.acquire();
+
+    await pool.stop();
+
+    const status = pool.status();
+    t.is(status.length, 0);
 });

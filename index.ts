@@ -1,6 +1,10 @@
+import assert from "assert";
+
 import { Page, Browser, launch, LaunchOptions } from "puppeteer";
-import { Pool, createPool } from "generic-pool";
 import { LockAsync } from "@eu-ge-ne/lock-async";
+import dbg from "debug";
+
+const debug = dbg("PuppeteerPool");
 
 export type Options = {
     launch?: () => Promise<Browser>;
@@ -15,50 +19,56 @@ export type Status = Array<{
 }>;
 
 type Item = {
+    id: number;
     created: number;
     browser: Browser;
+    pages: Page[];
     counter: number;
-    active: number;
 };
 
 export class PuppeteerPool {
-    private readonly items: Item[] = [];
-    private readonly pool: Pool<Page>;
     private readonly lock = new LockAsync();
+
+    private items: Item[] = [];
+    private nextItemId = 1;
 
     public constructor(private readonly options: Options) {
         if (this.options.concurrency < 1) {
             throw new Error("Concurrency option must be provided (>= 1)");
         }
-
-        this.pool = createPool(
-            {
-                create: () => this.factoryCreate(),
-                destroy: (page: Page) => this.factoryDestroy(page),
-            },
-            {
-                max: this.options.concurrency,
-            });
     }
 
     public async stop() {
-        await this.pool.drain();
-        await this.pool.clear();
+        return await this.lock.run(async () => {
+            for (const item of this.items) {
+                for (const page of item.pages) {
+                    await page.close();
+                }
+                await item.browser.close();
+            }
+            this.items = [];
+        });
 
-        for (const item of this.items) {
-            await item.browser.close();
+        debug("stop: stopping");
+        let itemIndex = this.items.length;
+        while (itemIndex--) {
+            let pageIndex = this.items[itemIndex].pages.length;
+            while (pageIndex--) {
+                await this.destroy(this.items[itemIndex].pages[pageIndex]);
+            }
         }
+        debug("stop: stopped");
     }
 
     public status(): Status {
         return this.items.map(x => ({
             lifetime: Date.now() - x.created,
             counter: x.counter,
-            active: x.active,
+            active: x.pages.length,
         }));
     }
 
-    private async factoryCreate(): Promise<Page> {
+    public async acquire(): Promise<Page> {
         return await this.lock.run(async () => {
             let item = this.items.find(x => x.counter < this.options.concurrency);
 
@@ -66,45 +76,54 @@ export class PuppeteerPool {
                 const browser = this.options.launch
                     ? await this.options.launch()
                     : await launch(this.options.launchOptions);
-                item = { created: Date.now(), browser, counter: 0, active: 0 };
+
+                item = {
+                    id: this.nextItemId++,
+                    created: Date.now(),
+                    browser,
+                    counter: 1,
+                    pages: [await browser.newPage()],
+                };
+
                 this.items.push(item);
+
+                debug("acquire: new browser; %o", { ...item, browser: null, pages: null, active: item.pages.length });
+
+                return item.pages[0];
             }
 
             item.counter += 1;
-            item.active += 1;
+            const page = await item.browser.newPage();
+            item.pages.push(page);
 
-            return item.browser.newPage();
+            debug("acquire: existing browser; %o", { ...item, browser: null, pages: null, active: item.pages.length });
+
+            return page;
         });
-    }
-
-    private async factoryDestroy(page: Page) {
-        await this.lock.run(async () => {
-            const browser = page.browser();
-            const index = this.items.findIndex(x => x.browser === browser);
-            if (index < 0) {
-                throw new Error("Browser not found in pool");
-            }
-
-            await page.close();
-
-            const item = this.items[index];
-
-            item.active -= 1;
-
-            if (item.counter >= this.options.concurrency) {
-                if (item.active === 0) {
-                    await item.browser.close();
-                    this.items.splice(index, 1);
-                }
-            }
-        });
-    }
-
-    public async acquire(): Promise<Page> {
-        return this.pool.acquire();
     }
 
     public async destroy(page: Page): Promise<void> {
-        await this.pool.destroy(page);
+        await this.lock.run(async () => {
+            const itemIndex = this.items.findIndex(item => item.pages.findIndex(x => x === page) >= 0);
+            if (itemIndex < 0) {
+                throw new Error("Provided page does not belong to the pool");
+            }
+
+            const item = this.items[itemIndex];
+            const pageIndex = item.pages.findIndex(x => x === page);
+
+            await page.close();
+            item.pages.splice(pageIndex, 1);
+
+            if ((item.pages.length > 0) || (item.counter < this.options.concurrency)) {
+                debug("destroy: page closed; %o", { ...item, browser: null, pages: null, active: item.pages.length });
+            } else {
+                assert(item.pages.length === 0);
+
+                await item.browser.close();
+                this.items.splice(itemIndex, 1);
+                debug("destroy: last page and browser closed; %o", { ...item, browser: null, pages: null, active: item.pages.length });
+            }
+        });
     }
 }
