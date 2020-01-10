@@ -15,7 +15,9 @@
     ],
     "scripts": {
         "build": "tsc",
-        "prepare": "tsc"
+        "test": "tsc && nyc ava",
+        "prepare": "tsc",
+        "prepublishOnly": "ava"
     },
     "repository": {
         "type": "git",
@@ -31,11 +33,14 @@
         "@types/generic-pool": "^3.1.9",
         "@types/node": "^12.12.6",
         "@types/puppeteer": "^2.0.0",
+        "ava": "2.4.0",
+        "nyc": "15.0.0",
+        "ts-node": "8.6.0",
         "typescript": "3.7.4"
     },
     "dependencies": {
-        "@eu-ge-ne/lock-async": "1.0.4",
+        "@eu-ge-ne/lock-async": "1.0.5",
         "generic-pool": "^3.7.1",
-        "puppeteer-core": "^2.0.0"
+        "puppeteer": "^2.0.0"
     }
 }
