@@ -104,7 +104,6 @@ test("Number of acquirers exceeds concurrency", async t => {
 
     const acquire = async () => {
         const page = await pool.acquire();
-        await new Promise(x => setTimeout(x, 10));
         await pool.destroy(page);
     };
 
