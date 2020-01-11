@@ -24,6 +24,8 @@ type Item = {
     counter: number;
 };
 
+const dbgItem = (x: Item) => ({ id: x.id, counter: x.counter, active: x.pages.length });
+
 export class PuppeteerPool {
     private readonly lock = new LockAsync(10_000);
 
@@ -77,7 +79,7 @@ export class PuppeteerPool {
 
                 this.items.push(item);
 
-                debug("acquire: new browser; %o", { ...item, browser: null, pages: null, active: item.pages.length });
+                debug("acquire: new browser; %o", dbgItem(item));
 
                 return item.pages[0];
             }
@@ -86,7 +88,7 @@ export class PuppeteerPool {
             const page = await item.browser.newPage();
             item.pages.push(page);
 
-            debug("acquire: existing browser; %o", { ...item, browser: null, pages: null, active: item.pages.length });
+            debug("acquire: existing browser; %o", dbgItem(item));
 
             return page;
         });
@@ -106,11 +108,11 @@ export class PuppeteerPool {
             item.pages.splice(pageIndex, 1);
 
             if ((item.pages.length > 0) || (item.counter < this.options.concurrency)) {
-                debug("destroy: page closed; %o", { ...item, browser: null, pages: null, active: item.pages.length });
+                debug("destroy: page closed; %o", dbgItem(item));
             } else {
                 await item.browser.close();
                 this.items.splice(itemIndex, 1);
-                debug("destroy: last page and browser closed; %o", { ...item, browser: null, pages: null, active: item.pages.length });
+                debug("destroy: last page and browser closed; %o", dbgItem(item));
             }
         });
     }
