@@ -1,5 +1,3 @@
-import assert from "assert";
-
 import { Page, Browser, launch, LaunchOptions } from "puppeteer";
 import { LockAsync } from "@eu-ge-ne/lock-async";
 import dbg from "debug";
@@ -110,8 +108,6 @@ export class PuppeteerPool {
             if ((item.pages.length > 0) || (item.counter < this.options.concurrency)) {
                 debug("destroy: page closed; %o", { ...item, browser: null, pages: null, active: item.pages.length });
             } else {
-                assert(item.pages.length === 0);
-
                 await item.browser.close();
                 this.items.splice(itemIndex, 1);
                 debug("destroy: last page and browser closed; %o", { ...item, browser: null, pages: null, active: item.pages.length });
