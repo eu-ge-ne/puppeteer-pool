@@ -61,6 +61,16 @@ test("status() returns status object", async t => {
     t.assert(status[0].active === 1);
 });
 
+test("Calling acquire() and destroy() n(concurrency) times ends with 0 browser instances", async t => {
+    const pool = t.context.pool;
+    const page1 = await pool.acquire();
+    const page2 = await pool.acquire();
+    await pool.destroy(page1);
+    await pool.destroy(page2);
+    const status = pool.status();
+    t.is(status.length, 0);
+});
+
 test("stop()", async t => {
     const pool = t.context.pool;
     await t.notThrowsAsync(() => pool.stop());
