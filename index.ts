@@ -1,8 +1,12 @@
+import { EventEmitter } from "events";
+
 import { Page, Browser, launch, LaunchOptions } from "puppeteer";
 import { LockAsync } from "@eu-ge-ne/lock-async";
 import dbg from "debug";
 
 const debug = dbg("PuppeteerPool");
+
+const dbgItem = (x: Item) => ({ id: x.id, counter: x.counter, active: x.pages.length });
 
 const ACQUIRE_TIMEOUT_DEFAULT = 30_000;
 
@@ -30,21 +34,33 @@ type Item = {
     counter: number;
 };
 
-const dbgItem = (x: Item) => ({ id: x.id, counter: x.counter, active: x.pages.length });
+type Events<P> = {
+    /** Emitted after page acquired */
+    after_acquire: (page: Page, opt: P) => void;
+    /** Emitted after page destroyed */
+    after_destroy: (page: Page) => void;
+};
 
-export class PuppeteerPool {
+export declare interface PuppeteerPool<P> {
+    on<E extends keyof Events<P>>(event: E, listener: Events<P>[E]): this;
+    emit<E extends keyof Events<P>>(event: E, ...args: Parameters<Events<P>[E]>): boolean;
+}
+
+export class PuppeteerPool<P = void> extends EventEmitter {
     private readonly lock = new LockAsync(10_000);
 
     private items: Item[] = [];
     private nextItemId = 1;
 
     public constructor(private readonly options: Options) {
+        super();
+
         if (this.options.concurrency < 1) {
             throw new Error("Concurrency option must be provided (>= 1)");
         }
     }
 
-    public async acquire(): Promise<Page> {
+    public async acquire(pageOpts: P): Promise<Page> {
         let result: Page | null = null;
 
         const acquireTimeout = this.options.acquireTimeout ?? ACQUIRE_TIMEOUT_DEFAULT
@@ -94,6 +110,8 @@ export class PuppeteerPool {
             throw new Error(`Acquire timeout: ${acquireTimeout} ms`);
         }
 
+        this.emit("after_acquire", result, pageOpts);
+
         return result;
     }
 
@@ -118,6 +136,8 @@ export class PuppeteerPool {
                 debug("destroy: last page and browser closed; %o", dbgItem(item));
             }
         });
+
+        this.emit("after_destroy", page);
     }
 
     public async stop() {

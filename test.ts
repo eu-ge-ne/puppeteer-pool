@@ -26,13 +26,17 @@ test.beforeEach(t => {
     });
 });
 
+test.afterEach(t => {
+    t.context.pool.stop();
+    t.context.pool.removeAllListeners();
+});
+
 test("Constructor returns instance", t => {
     t.assert(t.context.pool instanceof PuppeteerPool);
 });
 
 test("Throws Error if concurrency < 1", t => {
-    t.throws(
-        () => new PuppeteerPool({ concurrency: 0 }),
+    t.throws(() => new PuppeteerPool({ concurrency: 0 }),
         {
             instanceOf: Error,
             message: "Concurrency option must be provided (>= 1)",
@@ -110,4 +114,63 @@ test("Number of acquirers exceeds concurrency", async t => {
     const acquirers = new Array(10).fill(null).map(acquire);
 
     await t.notThrowsAsync(async () => await Promise.all(acquirers));
+});
+
+test("acquire() emits after_acquire event", async t => {
+    const pool = t.context.pool;
+
+    t.plan(2);
+
+    let pageFromEvent: Page | null = null;
+
+    pool.on("after_acquire", page => {
+        t.pass("after_acquire emitted");
+        pageFromEvent = page;
+    });
+
+    const page = await pool.acquire();
+
+    t.is(pageFromEvent, page);
+});
+
+test("acquire() emits after_acquire event with provided opts", async t => {
+    type PageOpts = { a: number; b: number; c: number };
+
+    const pool = new PuppeteerPool<PageOpts>({ concurrency: 1 });
+
+    t.plan(2);
+
+    const opts = { a: 1, b: 2, c: 3 };
+    let optsFromEvent: PageOpts | null = null;
+
+    pool.on("after_acquire", (page, opts) => {
+        t.pass("after_acquire emitted");
+        optsFromEvent = opts;
+    });
+
+    await pool.acquire(opts);
+
+    t.is(optsFromEvent, opts);
+
+    pool.stop();
+    pool.removeAllListeners();
+});
+
+test("destroy() emits after_destroy event", async t => {
+    const pool = t.context.pool;
+
+    t.plan(2);
+
+    const page = await pool.acquire();
+
+    let pageFromEvent: Page | null = null;
+
+    pool.on("after_destroy", page => {
+        t.pass("after_destroy emitted");
+        pageFromEvent = page;
+    });
+
+    await pool.destroy(page);
+
+    t.is(pageFromEvent, page);
 });

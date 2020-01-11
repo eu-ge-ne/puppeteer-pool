@@ -117,6 +117,40 @@ Returns array of browser descriptors:
 - `counter: number` - number of pages, opened by this browser instance (max value is equal to `concurrency` parameter)
 - `active: number` - number of active pages (browser instance will be destroyed when `counter === concurrency` and `active === 0`)
 
+### Events
+
+#### after_acquire
+
+Emitted after page acquired. Useful for additional page setup:
+
+```typescript
+const pool = new PuppeteerPool<{ attempt: number }>({ concurrency: 1 });
+
+pool.on("after_acquire", (page, opts) => {
+    const timeout = opts.attempt * 1000 * 60;
+
+    page.setDefaultNavigationTimeout(timeout);
+    page.setDefaultTimeout(timeout);
+});
+
+// ...
+
+const page = await pool.acquire({ attempt });
+
+page.on("error", err => console.log(err));
+page.on("console", msg => console.log(msg));
+```
+
+#### after_destroy
+
+Emitted after page destroyed. For example can be used for unsubscribing:
+
+```typescript
+// ...
+
+pool.on("after_destroy", page => page.removeAllListeners());
+```
+
 License
 -------
 
