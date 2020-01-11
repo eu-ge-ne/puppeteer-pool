@@ -4,9 +4,15 @@ import dbg from "debug";
 
 const debug = dbg("PuppeteerPool");
 
+const ACQUIRE_TIMEOUT_DEFAULT = 30_000;
+
 export type Options = {
     launch?: () => Promise<Browser>;
+    /** LaunchOptions for puppeteer */
     launchOptions?: LaunchOptions;
+    /** Maximum time in milliseconds to wait for acquire. Defaults to 30000 */
+    acquireTimeout?: number;
+    /** Concurrency of the pool */
     concurrency: number;
 };
 
@@ -38,33 +44,28 @@ export class PuppeteerPool {
         }
     }
 
-    public async stop() {
-        debug("stop: stopping");
-        return await this.lock.run(async () => {
-            for (const item of this.items) {
-                for (const page of item.pages) {
-                    await page.close();
-                }
-                await item.browser.close();
-            }
-            this.items = [];
-            debug("stop: stopped");
-        });
-    }
-
-    public status(): Status {
-        return this.items.map(x => ({
-            lifetime: Date.now() - x.created,
-            counter: x.counter,
-            active: x.pages.length,
-        }));
-    }
-
     public async acquire(): Promise<Page> {
-        return await this.lock.run(async () => {
-            let item = this.items.find(x => x.counter < this.options.concurrency);
+        let result: Page | null = null;
 
-            if (!item) {
+        const acquireTimeout = this.options.acquireTimeout ?? ACQUIRE_TIMEOUT_DEFAULT
+        const waitUntil = Date.now() + acquireTimeout;
+
+        do {
+            result = await this.lock.run(async () => {
+                if (this.totalActive >= this.options.concurrency) {
+                    return null;
+                }
+
+                let item = this.items.find(x => x.counter < this.options.concurrency);
+
+                if (item) {
+                    item.counter += 1;
+                    const page = await item.browser.newPage();
+                    item.pages.push(page);
+                    debug("acquire: existing browser; %o", dbgItem(item));
+                    return page;
+                }
+
                 const browser = this.options.launch
                     ? await this.options.launch()
                     : await launch(this.options.launchOptions);
@@ -82,16 +83,18 @@ export class PuppeteerPool {
                 debug("acquire: new browser; %o", dbgItem(item));
 
                 return item.pages[0];
+            });
+
+            if (!result) {
+                await new Promise(x => setTimeout(x, 1_000));
             }
+        } while (!result && (waitUntil - Date.now() > 0));
 
-            item.counter += 1;
-            const page = await item.browser.newPage();
-            item.pages.push(page);
+        if (!result) {
+            throw new Error(`Acquire timeout: ${acquireTimeout} ms`);
+        }
 
-            debug("acquire: existing browser; %o", dbgItem(item));
-
-            return page;
-        });
+        return result;
     }
 
     public async destroy(page: Page): Promise<void> {
@@ -115,5 +118,33 @@ export class PuppeteerPool {
                 debug("destroy: last page and browser closed; %o", dbgItem(item));
             }
         });
+    }
+
+    public async stop() {
+        debug("stop: stopping");
+        return await this.lock.run(async () => {
+            for (const item of this.items) {
+                for (const page of item.pages) {
+                    await page.close();
+                }
+                await item.browser.close();
+            }
+            this.items = [];
+            debug("stop: stopped");
+        });
+    }
+
+    public status(): Status {
+        return this.items.map(x => ({
+            lifetime: Date.now() - x.created,
+            counter: x.counter,
+            active: x.pages.length,
+        }));
+    }
+
+    private get totalActive(): number {
+        const count = this.items.reduce((sum, item) => sum + item.pages.length, 0);
+        debug("totalActive: %d", count);
+        return count;
     }
 }

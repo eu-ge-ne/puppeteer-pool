@@ -59,16 +59,19 @@ API
 ```typescript
 import { PuppeteerPool, LaunchOptions } from "@eu-ge-ne/puppeteer-pool";
 
-// LaunchOptions for puppeteer
+/** LaunchOptions for puppeteer */
 const launchOptions: LaunchOptions = {};
 
-// Concurrency of the pool
-const concurrency = 2;
+/** Maximum time in milliseconds to wait for acquire. Defaults to 30000 */
+const acquireTimeout: number = 30_000;
 
-const pool = new PuppeteerPool({ launchOptions, concurrency });
+/** Concurrency of the pool */
+const concurrency = 100;
+
+const pool = new PuppeteerPool({ launchOptions, acquireTimeout, concurrency });
 ```
 
-Or, provide `launch` option with function returning `Promise<Browser>`:
+Or, provide `launch` option with function `() => Promise<Browser>`:
 
 ```typescript
 import { PuppeteerPool, launch } from "@eu-ge-ne/puppeteer-pool";
@@ -86,7 +89,7 @@ const pool = new PuppeteerPool({
             "--disable-extensions",
         ],
     }),
-    concurrency: 1,
+    concurrency: 100,
 });
 ```
 

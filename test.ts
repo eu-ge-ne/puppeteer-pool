@@ -21,6 +21,7 @@ test.beforeEach(t => {
                 "--disable-extensions",
             ],
         },
+        acquireTimeout: 2_000,
         concurrency: 2,
     });
 });
@@ -87,4 +88,27 @@ test("After stop() all browsers and pages are closed", async t => {
 
     const status = pool.status();
     t.is(status.length, 0);
+});
+
+test("acquire() respects concurrency", async t => {
+    const pool = t.context.pool;
+
+    const page1 = await pool.acquire();
+    const page2 = await pool.acquire();
+
+    await t.throwsAsync(() => pool.acquire(), { instanceOf: Error, message: "Acquire timeout: 2000 ms" });
+});
+
+test("Number of acquirers exceeds concurrency", async t => {
+    const pool = t.context.pool;
+
+    const acquire = async () => {
+        const page = await pool.acquire();
+        await new Promise(x => setTimeout(x, 10));
+        await pool.destroy(page);
+    };
+
+    const acquirers = new Array(10).fill(null).map(acquire);
+
+    await t.notThrowsAsync(async () => await Promise.all(acquirers));
 });
