@@ -6,6 +6,7 @@ Page pooling for Puppeteer. Written in TypeScript. Each page is opened in new br
 ###### [Install](#Install) | [Example](#Example) | [Api](#Api) | [License](#License)
 
 ![](https://github.com/eu-ge-ne/puppeteer-pool/workflows/Tests/badge.svg)
+[![npm version](https://badge.fury.io/js/%40eu-ge-ne%2Fpuppeteer-pool.svg)](https://badge.fury.io/js/%40eu-ge-ne%2Fpuppeteer-pool)
 
 Install
 -------
