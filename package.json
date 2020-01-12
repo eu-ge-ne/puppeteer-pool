@@ -39,7 +39,7 @@
         "typescript": "3.7.4"
     },
     "dependencies": {
-        "@eu-ge-ne/lock-async": "1.0.7",
+        "@eu-ge-ne/lock-async": "1.0.8",
         "debug": "^4.1.1",
         "puppeteer": "^2.0.0"
     }
