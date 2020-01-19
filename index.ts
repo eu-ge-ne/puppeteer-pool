@@ -8,16 +8,34 @@ const debug = dbg("PuppeteerPool");
 
 const dbgItem = (x: Item) => ({ id: x.id, counter: x.counter, active: x.pages.length });
 
-const ACQUIRE_TIMEOUT_DEFAULT = 30_000;
+const CONCURRENCY_DEFAULT = 1;
+const ACQUIRE_TIMEOUT_DEFAULT = 45_000;
 
 export type Options = {
-    launch?: () => Promise<Browser>;
-    /** LaunchOptions for puppeteer */
-    launchOptions?: LaunchOptions;
-    /** Maximum time in milliseconds to wait for acquire. Defaults to 30000 */
+    /**
+     * Concurrency of the pool
+     * Defaults to 1
+     */
+    concurrency?: number;
+
+    /**
+     * Maximum time in milliseconds to wait for acquire
+     * Defaults to 45_000
+     * Should be greater than launchOptions.timeout
+     */
     acquireTimeout?: number;
-    /** Concurrency of the pool */
-    concurrency: number;
+
+    /**
+     * Options, provided to default puppeteer.launch()
+     */
+    launchOptions?: LaunchOptions;
+
+    /**
+     * Custom function, used instead of default puppeteer.launch()
+     * launchOptions are ignored in this case
+     * Must call puppeteer.launch() and return its result
+     */
+    launch?: () => Promise<Browser>;
 };
 
 export type Status = Array<{
@@ -54,17 +72,13 @@ export class PuppeteerPool<P = void> extends EventEmitter {
 
     public constructor(private readonly options: Options) {
         super();
-
-        if (this.options.concurrency < 1) {
-            throw new Error("Concurrency option must be provided (>= 1)");
-        }
+        debug("constructor: concurrency %d; acquireTimeout %d", this.concurrency, this.acquireTimeout);
     }
 
     public async acquire(pageOpts: P): Promise<Page> {
         let result: Page | null = null;
 
-        const acquireTimeout = this.options.acquireTimeout ?? ACQUIRE_TIMEOUT_DEFAULT
-        const waitUntil = Date.now() + acquireTimeout;
+        const waitUntil = Date.now() + this.acquireTimeout;
 
         do {
             try {
@@ -78,7 +92,7 @@ export class PuppeteerPool<P = void> extends EventEmitter {
         } while (!result && (waitUntil - Date.now() > 0));
 
         if (!result) {
-            throw new Error(`Acquire timeout: ${acquireTimeout} ms`);
+            throw new Error(`Acquire timeout: ${this.acquireTimeout} ms`);
         }
 
         this.emit("after_acquire", result, pageOpts);
@@ -97,7 +111,7 @@ export class PuppeteerPool<P = void> extends EventEmitter {
             const pageIndex = item.pages.findIndex(x => x === page);
             item.pages.splice(pageIndex, 1);
 
-            if ((item.pages.length > 0) || (item.counter < this.options.concurrency)) {
+            if ((item.pages.length > 0) || (item.counter < this.concurrency)) {
                 await page.close();
                 debug("destroy: page closed; %o", dbgItem(item));
             } else {
@@ -132,19 +146,25 @@ export class PuppeteerPool<P = void> extends EventEmitter {
         }));
     }
 
+    private get concurrency(): number {
+        return Math.max(CONCURRENCY_DEFAULT, this.options?.concurrency ?? 0);
+    }
+
+    private get acquireTimeout(): number {
+        return Math.max(ACQUIRE_TIMEOUT_DEFAULT, this.options?.acquireTimeout ?? 0);
+    }
+
     private get totalActive(): number {
-        const count = this.items.reduce((sum, item) => sum + item.pages.length, 0);
-        debug("totalActive: %d", count);
-        return count;
+        return this.items.reduce((sum, item) => sum + item.pages.length, 0);
     }
 
     private async tryAcquire(): Promise<Page | null> {
         return await this.lock.run(async () => {
-            if (this.totalActive >= this.options.concurrency) {
+            if (this.totalActive >= this.concurrency) {
                 return null;
             }
 
-            let item = this.items.find(x => x.counter < this.options.concurrency);
+            let item = this.items.find(x => x.counter < this.concurrency);
 
             if (item) {
                 const page = await item.browser.newPage();
