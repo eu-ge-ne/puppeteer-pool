@@ -1,12 +1,5 @@
 export default {
-    "files": [
-        "test.ts"
-    ],
-    "compileEnhancements": false,
-    "extensions": [
-        "ts"
-    ],
-    "require": [
-        "ts-node/register"
-    ]
+    "files": ["test.ts"],
+    "extensions": ["ts"],
+    "require": ["ts-node/register"]
 };
