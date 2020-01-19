@@ -95,15 +95,14 @@ export class PuppeteerPool<P = void> extends EventEmitter {
 
             const item = this.items[itemIndex];
             const pageIndex = item.pages.findIndex(x => x === page);
-
-            await page.close();
             item.pages.splice(pageIndex, 1);
 
             if ((item.pages.length > 0) || (item.counter < this.options.concurrency)) {
+                await page.close();
                 debug("destroy: page closed; %o", dbgItem(item));
             } else {
-                await item.browser.close();
                 this.items.splice(itemIndex, 1);
+                await item.browser.close();
                 debug("destroy: last page and browser closed; %o", dbgItem(item));
             }
         });
