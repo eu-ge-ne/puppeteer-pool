@@ -67,41 +67,11 @@ export class PuppeteerPool<P = void> extends EventEmitter {
         const waitUntil = Date.now() + acquireTimeout;
 
         do {
-            result = await this.lock.run(async () => {
-                if (this.totalActive >= this.options.concurrency) {
-                    return null;
-                }
-
-                let item = this.items.find(x => x.counter < this.options.concurrency);
-
-                if (item) {
-                    const page = await item.browser.newPage();
-                    item.pages.push(page);
-                    item.counter += 1;
-                    debug("acquire: existing browser; %o", dbgItem(item));
-                    return page;
-                } else {
-                    const browser = this.options.launch
-                        ? await this.options.launch()
-                        : await launch(this.options.launchOptions);
-                    try {
-                        item = {
-                            id: this.nextItemId++,
-                            created: Date.now(),
-                            browser,
-                            counter: 1,
-                            pages: [await browser.newPage()],
-                        };
-                    } catch (err) {
-                        await browser.close();
-                        throw err;
-                    }
-                    this.items.push(item);
-                    debug("acquire: new browser; %o", dbgItem(item));
-                    return item.pages[0];
-                }
-            });
-
+            try {
+                result = await this.tryAcquire();
+            } catch (err) {
+                debug("acquire: error %o", err);
+            }
             if (!result) {
                 await new Promise(x => setTimeout(x, 1_000));
             }
@@ -167,5 +137,43 @@ export class PuppeteerPool<P = void> extends EventEmitter {
         const count = this.items.reduce((sum, item) => sum + item.pages.length, 0);
         debug("totalActive: %d", count);
         return count;
+    }
+
+    private async tryAcquire(): Promise<Page | null> {
+        return await this.lock.run(async () => {
+            if (this.totalActive >= this.options.concurrency) {
+                return null;
+            }
+
+            let item = this.items.find(x => x.counter < this.options.concurrency);
+
+            if (item) {
+                const page = await item.browser.newPage();
+                item.pages.push(page);
+                item.counter += 1;
+                debug("tryAcquire: existing browser; %o", dbgItem(item));
+                return page;
+            } else {
+                const browser = this.options.launch
+                    ? await this.options.launch()
+                    : await launch(this.options.launchOptions);
+                try {
+                    const page = await browser.newPage();
+                    item = {
+                        id: this.nextItemId++,
+                        created: Date.now(),
+                        browser,
+                        counter: 1,
+                        pages: [page],
+                    };
+                } catch (err) {
+                    await browser.close();
+                    throw err;
+                }
+                this.items.push(item);
+                debug("tryAcquire: new browser; %o", dbgItem(item));
+                return item.pages[0];
+            }
+        });
     }
 }
