@@ -75,30 +75,31 @@ export class PuppeteerPool<P = void> extends EventEmitter {
                 let item = this.items.find(x => x.counter < this.options.concurrency);
 
                 if (item) {
-                    item.counter += 1;
                     const page = await item.browser.newPage();
                     item.pages.push(page);
+                    item.counter += 1;
                     debug("acquire: existing browser; %o", dbgItem(item));
                     return page;
+                } else {
+                    const browser = this.options.launch
+                        ? await this.options.launch()
+                        : await launch(this.options.launchOptions);
+                    try {
+                        item = {
+                            id: this.nextItemId++,
+                            created: Date.now(),
+                            browser,
+                            counter: 1,
+                            pages: [await browser.newPage()],
+                        };
+                    } catch (err) {
+                        await browser.close();
+                        throw err;
+                    }
+                    this.items.push(item);
+                    debug("acquire: new browser; %o", dbgItem(item));
+                    return item.pages[0];
                 }
-
-                const browser = this.options.launch
-                    ? await this.options.launch()
-                    : await launch(this.options.launchOptions);
-
-                item = {
-                    id: this.nextItemId++,
-                    created: Date.now(),
-                    browser,
-                    counter: 1,
-                    pages: [await browser.newPage()],
-                };
-
-                this.items.push(item);
-
-                debug("acquire: new browser; %o", dbgItem(item));
-
-                return item.pages[0];
             });
 
             if (!result) {

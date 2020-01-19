@@ -61,7 +61,7 @@ test("status() returns status object", async t => {
     const page = await pool.acquire();
     const status = pool.status();
     t.assert(status.length === 1);
-    t.assert(status[0].lifetime > 0);
+    t.assert(status[0].lifetime >= 0);
     t.assert(status[0].counter === 1);
     t.assert(status[0].active === 1);
 });
