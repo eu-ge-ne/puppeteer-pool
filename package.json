@@ -1,6 +1,6 @@
 {
     "name": "@eu-ge-ne/puppeteer-pool",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "description": "Page pooling for Puppeteer",
     "keywords": [
         "javascript",
