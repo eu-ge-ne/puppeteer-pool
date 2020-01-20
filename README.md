@@ -22,19 +22,10 @@ Example
 import { PuppeteerPool } from "@eu-ge-ne/puppeteer-pool";
 
 const pool = new PuppeteerPool({
-    launchOptions: {
-        ignoreHTTPSErrors: true,
-        timeout: 60000,
-        headless: true,
-        args: [
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-features=site-per-process",
-            "--disable-extensions",
-        ],
-    },
     concurrency: 100,
+    launchOptions: {
+        headless: true,
+    },
 });
 
 let page: Page | undefined;
@@ -60,16 +51,25 @@ API
 ```typescript
 import { PuppeteerPool, LaunchOptions } from "@eu-ge-ne/puppeteer-pool";
 
-/** LaunchOptions for puppeteer */
-const launchOptions: LaunchOptions = {};
-
-/** Maximum time in milliseconds to wait for acquire. Defaults to 30000 */
-const acquireTimeout: number = 30_000;
-
-/** Concurrency of the pool */
+/**
+ * Concurrency of the pool
+ * Defaults to 1
+ */
 const concurrency = 100;
 
-const pool = new PuppeteerPool({ launchOptions, acquireTimeout, concurrency });
+/**
+ * Maximum time in milliseconds to wait for acquire
+ * Defaults to 45_000
+ * Should be greater than launchOptions.timeout
+ */
+const acquireTimeout: number = 60_000;
+
+/**
+ * Options, provided to default puppeteer.launch()
+ */
+const launchOptions: LaunchOptions = {};
+
+const pool = new PuppeteerPool({ concurrency, acquireTimeout, launchOptions });
 ```
 
 Or, provide `launch` option with function `() => Promise<Browser>`:
@@ -78,19 +78,10 @@ Or, provide `launch` option with function `() => Promise<Browser>`:
 import { PuppeteerPool, launch } from "@eu-ge-ne/puppeteer-pool";
 
 const pool = new PuppeteerPool({
-    launch: () => launch({
-        ignoreHTTPSErrors: true,
-        timeout: 60000,
-        headless: true,
-        args: [
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-features=site-per-process",
-            "--disable-extensions",
-        ],
-    }),
     concurrency: 100,
+    launch: () => launch({
+        headless: true,
+    }),
 });
 ```
 
@@ -125,7 +116,7 @@ Returns array of browser descriptors:
 Emitted after page acquired. Useful for additional page setup:
 
 ```typescript
-const pool = new PuppeteerPool<{ attempt: number }>({ concurrency: 1 });
+const pool = new PuppeteerPool<{ attempt: number }>({ concurrency: 100 });
 
 pool.on("after_acquire", (page, opts) => {
     const timeout = opts.attempt * 1000 * 60;
@@ -150,6 +141,16 @@ Emitted after page destroyed. For example can be used for unsubscribing:
 // ...
 
 pool.on("after_destroy", page => page.removeAllListeners());
+```
+
+#### error
+
+Emitted when error occurred
+
+```typescript
+// ...
+
+pool.on("error", err => console.log(err));
 ```
 
 License
