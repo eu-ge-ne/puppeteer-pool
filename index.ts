@@ -53,10 +53,18 @@ type Item = {
 };
 
 type Events<P> = {
-    /** Emitted after page acquired */
+    /**
+     * Emitted after page acquired
+     */
     after_acquire: (page: Page, opt: P) => void;
-    /** Emitted after page destroyed */
+    /**
+     * Emitted after page destroyed
+     */
     after_destroy: (page: Page) => void;
+    /**
+     * Emitted when error occurred
+     */
+    error: (err: Error) => void;
 };
 
 export declare interface PuppeteerPool<P> {
@@ -65,7 +73,7 @@ export declare interface PuppeteerPool<P> {
 }
 
 export class PuppeteerPool<P = void> extends EventEmitter {
-    private readonly lock = new LockAsync(10_000);
+    private readonly lock: LockAsync;
 
     private items: Item[] = [];
     private nextItemId = 1;
@@ -73,6 +81,7 @@ export class PuppeteerPool<P = void> extends EventEmitter {
     public constructor(private readonly options: Options) {
         super();
         debug("constructor: concurrency %d; acquireTimeout %d", this.concurrency, this.acquireTimeout);
+        this.lock = new LockAsync(this.acquireTimeout);
     }
 
     public async acquire(pageOpts: P): Promise<Page> {
@@ -101,7 +110,7 @@ export class PuppeteerPool<P = void> extends EventEmitter {
     }
 
     public async destroy(page: Page): Promise<void> {
-        await this.lock.run(async () => {
+        const closable = await this.lock.run(async () => {
             const itemIndex = this.items.findIndex(item => item.pages.findIndex(x => x === page) >= 0);
             if (itemIndex < 0) {
                 throw new Error("Provided page does not belong to the pool");
@@ -112,14 +121,20 @@ export class PuppeteerPool<P = void> extends EventEmitter {
             item.pages.splice(pageIndex, 1);
 
             if ((item.pages.length > 0) || (item.counter < this.concurrency)) {
-                await page.close();
-                debug("destroy: page closed; %o", dbgItem(item));
+                debug("destroy: closing page; %o", dbgItem(item));
+                return page;
             } else {
                 this.items.splice(itemIndex, 1);
-                await item.browser.close();
-                debug("destroy: last page and browser closed; %o", dbgItem(item));
+                debug("destroy: closing last page and browser; %o", dbgItem(item));
+                return item.browser;
             }
         });
+
+        try {
+            await closable.close();
+        } catch (err) {
+            this.emit("error", err);
+        }
 
         this.emit("after_destroy", page);
     }
