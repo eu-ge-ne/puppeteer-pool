@@ -159,13 +159,11 @@ export class PuppeteerPool<P = void> extends EventEmitter {
         return Math.max(ACQUIRE_TIMEOUT_DEFAULT, this.options?.acquireTimeout ?? 0);
     }
 
-    private get totalActive(): number {
-        return this.browsers.reduce((sum, item) => sum + item.pages.length, 0);
-    }
-
     private async tryAcquire(): Promise<PageItem | null> {
         return await this.lock.run(async () => {
-            if (this.totalActive >= this.concurrency) {
+            const totalActive = this.browsers.reduce((sum, item) => sum + item.pages.length, 0);
+
+            if (totalActive >= this.concurrency) {
                 return null;
             }
 
