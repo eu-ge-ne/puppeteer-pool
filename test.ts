@@ -1,6 +1,6 @@
 import anyTest, { TestInterface } from "ava";
 
-import { Page } from "puppeteer";
+import { Page, launch } from "puppeteer";
 import { PuppeteerPool } from "./index";
 
 const test = anyTest as TestInterface<{
@@ -21,8 +21,17 @@ test.afterEach.always(t => {
     t.context.pool.removeAllListeners();
 });
 
-test("Constructor returns instance", t => {
-    t.assert(t.context.pool instanceof PuppeteerPool);
+test("Custom launch() called when provided", async t => {
+    t.plan(1);
+
+    const pool = new PuppeteerPool({
+        launch: () => {
+            t.pass("Custom launch() called");
+            return launch({ headless: true });
+        }
+    });
+
+    await pool.acquire();
 });
 
 test("acquire() returns Page", async t => {
@@ -44,7 +53,7 @@ test("destroy()", async t => {
 test("status() returns status object", async t => {
     const pool = t.context.pool;
 
-    const page = await pool.acquire();
+    await pool.acquire();
 
     const status = pool.status();
     t.assert(status.length === 1);
@@ -75,9 +84,9 @@ test("After stop() all browsers and pages are closed", async t => {
     const pool = t.context.pool;
 
     const page1 = await pool.acquire();
-    const page2 = await pool.acquire();
+    await pool.acquire();
     await pool.destroy(page1);
-    const page3 = await pool.acquire();
+    await pool.acquire();
     await pool.stop();
 
     const status = pool.status();
@@ -87,10 +96,11 @@ test("After stop() all browsers and pages are closed", async t => {
 test("acquire() respects concurrency", async t => {
     const pool = t.context.pool;
 
-    const page1 = await pool.acquire();
-    const page2 = await pool.acquire();
+    await pool.acquire();
+    await pool.acquire();
 
-    await t.throwsAsync(() => pool.acquire(), { instanceOf: Error, message: "Acquire timeout: 45000 ms" });
+    await t.throwsAsync(() => pool.acquire(),
+        { instanceOf: Error, message: "Acquire timeout: 45000 ms" });
 });
 
 test("Number of acquirers exceeds concurrency", async t => {
@@ -164,4 +174,16 @@ test("destroy() emits after_destroy event", async t => {
     await new Promise(x => setTimeout(x, 500));
 
     t.is(pageFromEvent, page);
+});
+
+test("destroy() throws error for page not created by acquire()", async t => {
+    const pool = t.context.pool;
+
+    const browser = await launch({ headless: true });
+    const page = await browser.newPage();
+
+    await t.throwsAsync(() => pool.destroy(page),
+        { instanceOf: Error, message: "Provided page does not belong to the pool" });
+
+    await browser.close();
 });
