@@ -17,19 +17,16 @@ export type Options = {
      * Defaults to 1
      */
     concurrency?: number;
-
     /**
      * Maximum time in milliseconds to wait for acquire
      * Defaults to 45_000
      * Should be greater than launchOptions.timeout
      */
     acquireTimeout?: number;
-
     /**
      * Options, provided to default puppeteer.launch()
      */
     launchOptions?: LaunchOptions;
-
     /**
      * Custom function, used instead of default puppeteer.launch()
      * launchOptions are ignored in this case
@@ -79,9 +76,9 @@ export class PuppeteerPool<P = void> extends EventEmitter {
 
     private browsers: BrowserItem[] = [];
     private nextItemId = 1;
-    private closeUsedTimeout!: NodeJS.Timeout;
     private usedBrowsers: Browser[] = [];
     private usedPages: Page[] = [];
+    private closeUsedTimeout!: NodeJS.Timeout;
 
     public constructor(private readonly options: Options) {
         super();
@@ -124,21 +121,20 @@ export class PuppeteerPool<P = void> extends EventEmitter {
         return await this.destroyAndClose(x => x[1] === page);
     }
 
-    public async stop() {
-        debug("stop: stopping");
-
-        clearTimeout(this.closeUsedTimeout);
-
+    public async destroyAll() {
         return await this.lock.run(async () => {
             for (const browserItem of this.browsers) {
-                try {
-                    await browserItem.browser.close();
-                } catch (err) {
-                    this.emit("error", err);
+                for (const pageItem of browserItem.pages) {
+                    if (pageItem[1]) {
+                        this.usedPages.push(pageItem[1]);
+                    }
                 }
+                this.usedBrowsers.push(browserItem.browser);
             }
+
             this.browsers = [];
-            debug("stop: stopped");
+
+            this.closeUsed();
         });
     }
 
@@ -221,11 +217,11 @@ export class PuppeteerPool<P = void> extends EventEmitter {
                 this.usedBrowsers.push(browserItem.browser);
             }
 
-            await this.closeUsed();
+            this.closeUsed();
         });
     }
 
-    private async closeUsed() {
+    private closeUsed() {
         clearTimeout(this.closeUsedTimeout);
 
         this.closeUsedTimeout = setTimeout(async () => {

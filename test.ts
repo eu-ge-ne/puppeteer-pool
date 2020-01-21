@@ -17,7 +17,7 @@ test.beforeEach(t => {
 });
 
 test.afterEach.always(t => {
-    t.context.pool.stop();
+    t.context.pool.destroyAll();
     t.context.pool.removeAllListeners();
 });
 
@@ -74,20 +74,20 @@ test("Calling acquire() and destroy() n(concurrency) times ends with 0 browser i
     t.is(status.length, 0);
 });
 
-test("stop()", async t => {
+test("destoryAll()", async t => {
     const pool = t.context.pool;
 
-    await t.notThrowsAsync(() => pool.stop());
+    await t.notThrowsAsync(() => pool.destroyAll());
 });
 
-test("After stop() all browsers and pages are closed", async t => {
+test("After destoryAll() all browsers and pages are closed", async t => {
     const pool = t.context.pool;
 
     const page1 = await pool.acquire();
     await pool.acquire();
     await pool.destroy(page1);
     await pool.acquire();
-    await pool.stop();
+    await pool.destroyAll();
 
     const status = pool.status();
     t.is(status.length, 0);
@@ -152,7 +152,7 @@ test("acquire() emits after_acquire event with provided opts", async t => {
 
     t.is(optsFromEvent, opts);
 
-    pool.stop();
+    pool.destroyAll();
     pool.removeAllListeners();
 });
 

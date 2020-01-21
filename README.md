@@ -33,9 +33,6 @@ let page: Page | undefined;
 try {
     page = await pool.acquire();
     page.on("error", err => console.log(err));
-    // ...
-} catch (err) {
-    // ...
 } finally {
     if (page) {
         await pool.destroy(page);
@@ -95,6 +92,12 @@ const page = await pool.acquire();
 
 ```typescript
 await pool.destroy(page);
+```
+
+### Destroy all pages
+
+```typescript
+await pool.destroyAll();
 ```
 
 ### Get status
