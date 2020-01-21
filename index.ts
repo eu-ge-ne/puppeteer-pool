@@ -131,12 +131,11 @@ export class PuppeteerPool<P = void> extends EventEmitter {
 
         return await this.lock.run(async () => {
             for (const browserItem of this.browsers) {
-                for (const pageItem of browserItem.pages) {
-                    if (pageItem[1]) {
-                        await pageItem[1].close();
-                    }
+                try {
+                    await browserItem.browser.close();
+                } catch (err) {
+                    this.emit("error", err);
                 }
-                await browserItem.browser.close();
             }
             this.browsers = [];
             debug("stop: stopped");
