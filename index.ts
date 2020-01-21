@@ -6,7 +6,7 @@ import dbg from "debug";
 
 const debug = dbg("PuppeteerPool");
 
-const dbgItem = (x: Item) => ({ id: x.id, counter: x.counter, active: x.pages.length });
+const dbgItem = (x: BrowserItem) => ({ id: x.id, counter: x.counter, active: x.pages.length });
 
 const CONCURRENCY_DEFAULT = 1;
 const ACQUIRE_TIMEOUT_DEFAULT = 45_000;
@@ -44,11 +44,13 @@ export type Status = Array<{
     active: number;
 }>;
 
-type Item = {
+type PageItem = [Promise<Page>, Page | null];
+
+type BrowserItem = {
     id: number;
     created: number;
     browser: Browser;
-    pages: Page[];
+    pages: PageItem[];
     counter: number;
 };
 
@@ -75,8 +77,11 @@ export declare interface PuppeteerPool<P> {
 export class PuppeteerPool<P = void> extends EventEmitter {
     private readonly lock: LockAsync;
 
-    private items: Item[] = [];
+    private browsers: BrowserItem[] = [];
     private nextItemId = 1;
+    private closeUsedTimeout!: NodeJS.Timeout;
+    private usedBrowsers: Browser[] = [];
+    private usedPages: Page[] = [];
 
     public constructor(private readonly options: Options) {
         super();
@@ -85,7 +90,7 @@ export class PuppeteerPool<P = void> extends EventEmitter {
     }
 
     public async acquire(pageOpts: P): Promise<Page> {
-        let result: Page | null = null;
+        let result: PageItem | null = null;
 
         const waitUntil = Date.now() + this.acquireTimeout;
 
@@ -104,57 +109,42 @@ export class PuppeteerPool<P = void> extends EventEmitter {
             throw new Error(`Acquire timeout: ${this.acquireTimeout} ms`);
         }
 
-        this.emit("after_acquire", result, pageOpts);
-
-        return result;
+        try {
+            const page = result[1] = await result[0];
+            this.emit("after_acquire", page, pageOpts);
+            return page;
+        } catch (err) {
+            const pagePromise = result[0];
+            await this.destroyAndClose(x => x[0] === pagePromise);
+            throw err;
+        }
     }
 
     public async destroy(page: Page): Promise<void> {
-        const closable = await this.lock.run(async () => {
-            const itemIndex = this.items.findIndex(item => item.pages.findIndex(x => x === page) >= 0);
-            if (itemIndex < 0) {
-                throw new Error("Provided page does not belong to the pool");
-            }
-
-            const item = this.items[itemIndex];
-            const pageIndex = item.pages.findIndex(x => x === page);
-            item.pages.splice(pageIndex, 1);
-
-            if ((item.pages.length > 0) || (item.counter < this.concurrency)) {
-                debug("destroy: closing page; %o", dbgItem(item));
-                return page;
-            } else {
-                this.items.splice(itemIndex, 1);
-                debug("destroy: closing last page and browser; %o", dbgItem(item));
-                return item.browser;
-            }
-        });
-
-        try {
-            await closable.close();
-        } catch (err) {
-            this.emit("error", err);
-        }
-
-        this.emit("after_destroy", page);
+        return await this.destroyAndClose(x => x[1] === page);
     }
 
     public async stop() {
         debug("stop: stopping");
+
+        clearTimeout(this.closeUsedTimeout);
+
         return await this.lock.run(async () => {
-            for (const item of this.items) {
-                for (const page of item.pages) {
-                    await page.close();
+            for (const browserItem of this.browsers) {
+                for (const pageItem of browserItem.pages) {
+                    if (pageItem[1]) {
+                        await pageItem[1].close();
+                    }
                 }
-                await item.browser.close();
+                await browserItem.browser.close();
             }
-            this.items = [];
+            this.browsers = [];
             debug("stop: stopped");
         });
     }
 
     public status(): Status {
-        return this.items.map(x => ({
+        return this.browsers.map(x => ({
             lifetime: Date.now() - x.created,
             counter: x.counter,
             active: x.pages.length,
@@ -170,44 +160,100 @@ export class PuppeteerPool<P = void> extends EventEmitter {
     }
 
     private get totalActive(): number {
-        return this.items.reduce((sum, item) => sum + item.pages.length, 0);
+        return this.browsers.reduce((sum, item) => sum + item.pages.length, 0);
     }
 
-    private async tryAcquire(): Promise<Page | null> {
+    private async tryAcquire(): Promise<PageItem | null> {
         return await this.lock.run(async () => {
             if (this.totalActive >= this.concurrency) {
                 return null;
             }
 
-            let item = this.items.find(x => x.counter < this.concurrency);
+            let browserItem = this.browsers.find(x => x.counter < this.concurrency);
 
-            if (item) {
-                const page = await item.browser.newPage();
-                item.pages.push(page);
-                item.counter += 1;
-                debug("tryAcquire: existing browser; %o", dbgItem(item));
-                return page;
+            if (browserItem) {
+                const pageItem: PageItem = [browserItem.browser.newPage(), null];
+                browserItem.pages.push(pageItem);
+                browserItem.counter += 1;
+                debug("tryAcquire: existing browser; %o", dbgItem(browserItem));
+                return pageItem;
             } else {
                 const browser = this.options.launch
                     ? await this.options.launch()
                     : await launch(this.options.launchOptions);
                 try {
-                    const page = await browser.newPage();
-                    item = {
+                    const pageItem: PageItem = [browser.newPage(), null];
+                    browserItem = {
                         id: this.nextItemId++,
                         created: Date.now(),
                         browser,
                         counter: 1,
-                        pages: [page],
+                        pages: [pageItem],
                     };
                 } catch (err) {
                     await browser.close();
                     throw err;
                 }
-                this.items.push(item);
-                debug("tryAcquire: new browser; %o", dbgItem(item));
-                return item.pages[0];
+                this.browsers.push(browserItem);
+                debug("tryAcquire: new browser; %o", dbgItem(browserItem));
+                return browserItem.pages[0];
             }
         });
+    }
+
+    private async destroyAndClose(find: (x: PageItem) => boolean): Promise<void> {
+        await this.lock.run(async () => {
+            const browserIndex = this.browsers.findIndex(item => item.pages.findIndex(find) >= 0);
+            if (browserIndex < 0) {
+                throw new Error("Provided page does not belong to the pool");
+            }
+
+            const browserItem = this.browsers[browserIndex];
+            const pageIndex = browserItem.pages.findIndex(find);
+            const pageItem = browserItem.pages[pageIndex];
+            browserItem.pages.splice(pageIndex, 1);
+
+            if ((browserItem.pages.length > 0) || (browserItem.counter < this.concurrency)) {
+                debug("destroy: closing page; %o", dbgItem(browserItem));
+                if (pageItem[1]) {
+                    this.usedPages.push(pageItem[1]);
+                }
+            } else {
+                this.browsers.splice(browserIndex, 1);
+                debug("destroy: closing last page and browser; %o", dbgItem(browserItem));
+                this.usedBrowsers.push(browserItem.browser);
+            }
+
+            await this.closeUsed();
+        });
+    }
+
+    private async closeUsed() {
+        clearTimeout(this.closeUsedTimeout);
+
+        this.closeUsedTimeout = setTimeout(async () => {
+            const usedPages = this.usedPages;
+            const usedBrowsers = this.usedBrowsers;
+
+            this.usedPages = [];
+            this.usedBrowsers = [];
+
+            for (const page of usedPages) {
+                try {
+                    await page.close();
+                    this.emit("after_destroy", page);
+                } catch (err) {
+                    this.emit("error", err);
+                }
+            }
+
+            for (const browser of usedBrowsers) {
+                try {
+                    await browser.close();
+                } catch (err) {
+                    this.emit("error", err);
+                }
+            }
+        }, 100);
     }
 }

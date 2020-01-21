@@ -161,6 +161,7 @@ test("destroy() emits after_destroy event", async t => {
     });
 
     await pool.destroy(page);
+    await new Promise(x => setTimeout(x, 500));
 
     t.is(pageFromEvent, page);
 });
