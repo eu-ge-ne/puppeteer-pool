@@ -28,14 +28,14 @@ const pool = new PuppeteerPool({
     },
 });
 
-let page: Page | undefined;
+let page!: Page;
 
 try {
     page = await pool.acquire();
     page.on("error", err => console.log(err));
 } finally {
     if (page) {
-        await pool.destroy(page);
+        pool.close(page);
     }
 }
 ```
@@ -56,8 +56,8 @@ const concurrency = 100;
 
 /**
  * Maximum time in milliseconds to wait for acquire
- * Defaults to 45_000
- * Should be greater than launchOptions.timeout
+ * Defaults to 30_000
+ * Should be equal or greater than launchOptions.timeout
  */
 const acquireTimeout: number = 60_000;
 
@@ -88,29 +88,46 @@ const pool = new PuppeteerPool({
 const page = await pool.acquire();
 ```
 
-### Destroy page
+### Close page
 
 ```typescript
-await pool.destroy(page);
+pool.close(page);
 ```
 
-### Destroy all pages
+### Close all pages
 
 ```typescript
-await pool.destroyAll();
+pool.closeAll();
 ```
 
-### Get status
+### Get stats
 
 ```typescript
-const [{ lifetime, counter, active }, ...rest] = pool.status();
+const stats = pool.stats();
+
+const {
+    // array of browser descriptors
+    browsers: [
+        {
+            // browser instance lifetime in ms
+            // (instance will be destroyed when `counter === concurrency` and `active === 0`)
+            lifetime,
+            // number of pages, opened by this browser instance
+            // (max value is equal to `concurrency` parameter)
+            counter,
+            // number of active pages
+            active,
+        },
+        ...rest
+    ],
+    acquireTime: {
+        // max acquire time
+        max,
+        // mean acquire time
+        mean,
+    }
+} = stats;
 ```
-
-Returns array of browser descriptors:
-
-- `lifetime: number` - browser instance lifetime in ms
-- `counter: number` - number of pages, opened by this browser instance (max value is equal to `concurrency` parameter)
-- `active: number` - number of active pages (browser instance will be destroyed when `counter === concurrency` and `active === 0`)
 
 ### Events
 
@@ -136,14 +153,14 @@ page.on("error", err => console.log(err));
 page.on("console", msg => console.log(msg));
 ```
 
-#### after_destroy
+#### after_close
 
-Emitted after page destroyed. For example can be used for unsubscribing:
+Emitted after page closed. For example can be used for unsubscribing:
 
 ```typescript
 // ...
 
-pool.on("after_destroy", page => page.removeAllListeners());
+pool.on("after_close", page => page.removeAllListeners());
 ```
 
 #### error
